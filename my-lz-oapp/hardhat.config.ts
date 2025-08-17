@@ -54,19 +54,19 @@ const config: HardhatUserConfig = {
         ],
     },
     networks: {
-        'optimism-testnet': {
-            eid: EndpointId.OPTSEP_V2_TESTNET,
-            url: process.env.RPC_URL_OP_SEPOLIA || 'https://optimism-sepolia.gateway.tenderly.co',
-            accounts,
-        },
-        'avalanche-testnet': {
-            eid: EndpointId.AVALANCHE_V2_TESTNET,
-            url: process.env.RPC_URL_FUJI || 'https://avalanche-fuji.drpc.org',
-            accounts,
-        },
-        'arbitrum-testnet': {
+        arbitrumSepolia: {
             eid: EndpointId.ARBSEP_V2_TESTNET,
-            url: process.env.RPC_URL_ARB_SEPOLIA || 'https://arbitrum-sepolia.gateway.tenderly.co',
+            url: process.env.RPC_URL_ARBITRUM || 'https://arbitrum-sepolia.gateway.tenderly.co',
+            accounts,
+        },
+        baseSepolia: {
+            eid: EndpointId.BASESEP_V2_TESTNET,
+            url: process.env.RPC_URL_BASE_CHAIN || 'https://sepolia.base.org',
+            accounts,
+        },
+        flowTestnet: {
+            eid: EndpointId.FLOW_V2_TESTNET,
+            url: process.env.RPC_URL_FLOW || 'https://testnet.evm.nodes.onflow.org',
             accounts,
         },
         hardhat: {

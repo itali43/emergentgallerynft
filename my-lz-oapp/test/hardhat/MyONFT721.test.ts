@@ -5,6 +5,9 @@ import { deployments, ethers } from 'hardhat'
 
 import { Options } from '@layerzerolabs/lz-v2-utilities'
 
+// Import chai matchers for better testing
+import '@nomiclabs/hardhat-waffle'
+
 describe('MyONFT721 Test', function () {
     // Constant representing a mock Endpoint ID for testing purposes
     const eidA = 1
@@ -86,5 +89,172 @@ describe('MyONFT721 Test', function () {
         // Asserting that the final balances are as expected after the send operation
         expect(finalBalanceA).eql(ethers.BigNumber.from(0))
         expect(finalBalanceB).eql(ethers.BigNumber.from(1))
+    })
+
+    // Test forge functionality
+    it('should forge a new NFT with metadata on destination chain', async function () {
+        // Minting an initial token to ownerA's address in the myONFT721A contract
+        const tokenId = 1
+        await myONFT721A.mint(ownerA.address, tokenId)
+
+        // Check initial balances
+        const initialBalanceA = await myONFT721A.balanceOf(ownerA.address)
+        const initialBalanceB = await myONFT721B.balanceOf(ownerB.address)
+        expect(initialBalanceA).eql(ethers.BigNumber.from(1))
+        expect(initialBalanceB).eql(ethers.BigNumber.from(0))
+
+        // Defining extra message execution options for the forge operation
+        const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+
+        // Create forge message with metadata URI in composeMsg
+        const metadataURI = 'ipfs://QmYourMetadataHash'
+        const composeMsgBytes = ethers.utils.toUtf8Bytes(metadataURI)
+
+        const forgeSendParam = [
+            eidB,
+            ethers.utils.zeroPad(ownerB.address, 32),
+            tokenId,
+            options,
+            composeMsgBytes, // This makes it a forge operation
+            '0x',
+        ]
+
+        // Fetching the native fee for the forge operation
+        const [nativeFee] = await myONFT721A.quoteSend(forgeSendParam, false)
+
+        // Executing the forge operation from myONFT721A contract
+        await myONFT721A.send(forgeSendParam, [nativeFee, 0], ownerA.address, { value: nativeFee })
+
+        // Fetching the final token balances
+        const finalBalanceA = await myONFT721A.balanceOf(ownerA.address)
+        const finalBalanceB = await myONFT721B.balanceOf(ownerB.address)
+
+        // Original NFT should stay with ownerA (not debited in forge operation)
+        expect(finalBalanceA).eql(ethers.BigNumber.from(1))
+        // New NFT should be minted to ownerB on chain B
+        expect(finalBalanceB).eql(ethers.BigNumber.from(1))
+
+        // Verify that ownerB owns the new token on chain B
+        const ownerOfTokenOnB = await myONFT721B.ownerOf(tokenId)
+        expect(ownerOfTokenOnB).to.equal(ownerB.address)
+    })
+
+    // Test forging masterpiece functionality
+    it('should allow starting and completing masterpiece forging', async function () {
+        const tokenId = 2
+        await myONFT721A.mint(ownerA.address, tokenId)
+
+        // Check initial forging state
+        expect(await myONFT721A.isForgingMasterpiece(tokenId)).to.be.false
+
+        // Start forging masterpiece
+        await myONFT721A.connect(ownerA).startForgingMasterpiece(tokenId)
+
+        // Check forging state
+        expect(await myONFT721A.isForgingMasterpiece(tokenId)).to.be.true
+
+        // Get forging info
+        const forgingInfo = await myONFT721A.getForgingInfo(tokenId)
+        expect(forgingInfo.isForging).to.be.true
+        expect(forgingInfo.startTime).to.be.gt(0)
+        expect(forgingInfo.completionTime).to.be.gt(forgingInfo.startTime)
+        expect(forgingInfo.timeRemaining).to.be.gt(0)
+
+        // Should not be able to transfer while forging
+        const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+        const sendParam = [eidB, ethers.utils.zeroPad(ownerB.address, 32), tokenId, options, '0x', '0x']
+        const [nativeFee] = await myONFT721A.quoteSend(sendParam, false)
+
+        // Try to send while forging (should fail)
+        let failed = false
+        try {
+            await myONFT721A.send(sendParam, [nativeFee, 0], ownerA.address, { value: nativeFee })
+        } catch (error: any) {
+            failed = true
+            expect(error.message).to.include('NFTForgingMasterpieceInProgress')
+        }
+        expect(failed).to.be.true
+
+        // Try to complete forging too early (should fail)
+        let earlyCompleteFailed = false
+        try {
+            await myONFT721A.connect(ownerA).completeForgingMasterpiece(tokenId)
+        } catch (error: any) {
+            earlyCompleteFailed = true
+            expect(error.message).to.include('ForgingNotComplete')
+        }
+        expect(earlyCompleteFailed).to.be.true
+
+        // Fast forward time (simulate passage of forging duration)
+        await ethers.provider.send('evm_increaseTime', [24 * 60 * 60 + 1]) // 24 hours + 1 second
+        await ethers.provider.send('evm_mine', [])
+
+        // Check that forging is complete
+        expect(await myONFT721A.isForgingComplete(tokenId)).to.be.true
+
+        // Complete forging masterpiece
+        await myONFT721A.connect(ownerA).completeForgingMasterpiece(tokenId)
+
+        // Check forging state after completion
+        expect(await myONFT721A.isForgingMasterpiece(tokenId)).to.be.false
+
+        // Should be able to transfer after forging is complete
+        await myONFT721A.send(sendParam, [nativeFee, 0], ownerA.address, { value: nativeFee })
+
+        // Verify the transfer worked
+        const finalBalanceA = await myONFT721A.balanceOf(ownerA.address)
+        const finalBalanceB = await myONFT721B.balanceOf(ownerB.address)
+        expect(finalBalanceA).eql(ethers.BigNumber.from(0))
+        expect(finalBalanceB).eql(ethers.BigNumber.from(1))
+    })
+
+    // Test that only owner or contract owner can lock/unlock
+    it('should only allow owner or contract owner to start/complete forging', async function () {
+        const tokenId = 3
+        await myONFT721A.mint(ownerA.address, tokenId)
+
+        // ownerB should not be able to start forging ownerA's token
+        let unauthorizedStartFailed = false
+        try {
+            await myONFT721A.connect(ownerB).startForgingMasterpiece(tokenId)
+        } catch (error: any) {
+            unauthorizedStartFailed = true
+            expect(error.message).to.include('Not owner or contract owner')
+        }
+        expect(unauthorizedStartFailed).to.be.true
+
+        // ownerA should be able to start forging their own token
+        await myONFT721A.connect(ownerA).startForgingMasterpiece(tokenId)
+
+        // ownerB should not be able to complete forging ownerA's token
+        let unauthorizedCompleteFailed = false
+        try {
+            await myONFT721A.connect(ownerB).completeForgingMasterpiece(tokenId)
+        } catch (error: any) {
+            unauthorizedCompleteFailed = true
+            expect(error.message).to.include('Not owner or contract owner')
+        }
+        expect(unauthorizedCompleteFailed).to.be.true
+    })
+
+    // Test forging duration configuration
+    it('should allow owner to set forging duration', async function () {
+        const newDuration = 12 * 60 * 60 // 12 hours
+
+        // Only contract owner should be able to set duration
+        let unauthorizedDurationFailed = false
+        try {
+            await myONFT721A.connect(ownerB).setForgingDuration(newDuration)
+        } catch (error: any) {
+            unauthorizedDurationFailed = true
+            expect(error.message).to.include('caller is not the owner')
+        }
+        expect(unauthorizedDurationFailed).to.be.true
+
+        // Contract owner should be able to set duration
+        await myONFT721A.connect(ownerA).setForgingDuration(newDuration)
+
+        // Verify the new duration is set
+        expect(await myONFT721A.forgingDuration()).to.equal(newDuration)
     })
 })

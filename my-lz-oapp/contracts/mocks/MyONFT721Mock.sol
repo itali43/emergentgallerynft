@@ -12,7 +12,7 @@ contract MyONFT721Mock is MyONFT721 {
         address _delegate
     ) MyONFT721(_name, _symbol, _lzEndpoint, _delegate) {}
 
-    function mint(address _to, uint256 _amount) public {
-        _mint(_to, _amount);
+    function mint(address _to, uint256 _tokenId) public {
+        _mint(_to, _tokenId);
     }
 }
