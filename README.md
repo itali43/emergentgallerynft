@@ -1,4 +1,4 @@
-## Emergent Gallery NFT Contracts
+## Emergent Gallery NFT Contracts (ONFT)
 
 A compact smart contract suite for Emergent Gallery that mints and moves NFTs across chains, and supports a creative “forging masterpiece” flow. Contracts are written in Solidity and built with Hardhat. Cross-chain functionality is powered by LayerZero v2 ONFT-721.
 

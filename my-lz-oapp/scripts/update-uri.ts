@@ -1,3 +1,6 @@
+// Command to run this script:
+// npx hardhat run scripts/update-uri.ts --network baseSepolia -- --tokenId 1 --uri "https://your-metadata-url.com/1.json"
+
 import hre from 'hardhat'
 
 function getArg(flag: string): string | undefined {
