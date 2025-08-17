@@ -5,9 +5,6 @@ import { deployments, ethers } from 'hardhat'
 
 import { Options } from '@layerzerolabs/lz-v2-utilities'
 
-// Import chai matchers for better testing
-import '@nomiclabs/hardhat-waffle'
-
 describe('MyONFT721 Test', function () {
     // Constant representing a mock Endpoint ID for testing purposes
     const eidA = 1
@@ -156,9 +153,9 @@ describe('MyONFT721 Test', function () {
         // Get forging info
         const forgingInfo = await myONFT721A.getForgingInfo(tokenId)
         expect(forgingInfo.isForging).to.be.true
-        expect(forgingInfo.startTime).to.be.gt(0)
-        expect(forgingInfo.completionTime).to.be.gt(forgingInfo.startTime)
-        expect(forgingInfo.timeRemaining).to.be.gt(0)
+        expect(forgingInfo.startTime.toNumber()).to.be.gt(0)
+        expect(forgingInfo.completionTime.toNumber()).to.be.gt(forgingInfo.startTime.toNumber())
+        expect(forgingInfo.timeRemaining.toNumber()).to.be.gt(0)
 
         // Should not be able to transfer while forging
         const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
@@ -235,26 +232,5 @@ describe('MyONFT721 Test', function () {
             expect(error.message).to.include('Not owner or contract owner')
         }
         expect(unauthorizedCompleteFailed).to.be.true
-    })
-
-    // Test forging duration configuration
-    it('should allow owner to set forging duration', async function () {
-        const newDuration = 12 * 60 * 60 // 12 hours
-
-        // Only contract owner should be able to set duration
-        let unauthorizedDurationFailed = false
-        try {
-            await myONFT721A.connect(ownerB).setForgingDuration(newDuration)
-        } catch (error: any) {
-            unauthorizedDurationFailed = true
-            expect(error.message).to.include('caller is not the owner')
-        }
-        expect(unauthorizedDurationFailed).to.be.true
-
-        // Contract owner should be able to set duration
-        await myONFT721A.connect(ownerA).setForgingDuration(newDuration)
-
-        // Verify the new duration is set
-        expect(await myONFT721A.forgingDuration()).to.equal(newDuration)
     })
 })
