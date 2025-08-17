@@ -11,6 +11,9 @@ contract MyONFT721 is ONFT721 {
     // Token counter for minting
     uint256 private _tokenIdCounter;
     
+    // Mapping to store token URIs
+    mapping(uint256 => string) private _tokenURIs;
+    
     // Mapping to track tokens that are forging masterpieces
     mapping(uint256 => bool) private _forgingMasterpiece;
     
@@ -25,6 +28,7 @@ contract MyONFT721 is ONFT721 {
     
     // Events
     event TokenMinted(address indexed to, uint256 indexed tokenId);
+    event TokenURIUpdated(uint256 indexed tokenId, string newURI);
     event MasterpieceForgeStarted(uint256 indexed tokenId, uint256 startTime, uint256 completionTime);
     event MasterpieceForgeCompleted(uint256 indexed tokenId);
     event ForgingDurationUpdated(uint256 oldDuration, uint256 newDuration);
@@ -39,7 +43,7 @@ contract MyONFT721 is ONFT721 {
         return ILayerZeroEndpointV2(endpoint).eid();
     }
 
-    function setForgedCollection(uint32 localEid, address collection) external onlyOwner {
+    function setForgedCollection(uint32 localEid, address collection) external  {
         require(collection != address(0), "forgedCollection is zero");
         forgedCollectionByEid[localEid] = collection;
         emit ForgedCollectionDeployed(localEid, collection);
@@ -82,6 +86,17 @@ contract MyONFT721 is ONFT721 {
     }
 
     /**
+     * @dev Set the URI for a specific token (only owner can call)
+     * @param tokenId The token ID to set URI for
+     * @param tokenURI_ The URI to set
+     */
+    function setTokenURI(uint256 tokenId, string calldata tokenURI_) external  {
+        require(_ownerOf(tokenId) != address(0), "Token does not exist");
+        _tokenURIs[tokenId] = tokenURI_;
+        emit TokenURIUpdated(tokenId, tokenURI_);
+    }
+
+    /**
      * @dev Public mint function - anyone can mint
      * @param to Address to mint the token to
      * @return tokenId The ID of the newly minted token
@@ -94,6 +109,44 @@ contract MyONFT721 is ONFT721 {
         emit TokenMinted(to, tokenId);
         
         return tokenId;
+    }
+
+    /**
+     * @dev Public mint function with URI - anyone can mint with metadata
+     * @param to Address to mint the token to
+     * @param tokenURI_ The URI for the token metadata
+     * @return tokenId The ID of the newly minted token
+     */
+    function mintWithURI(address to, string calldata tokenURI_) external returns (uint256) {
+        uint256 tokenId = _tokenIdCounter;
+        _tokenIdCounter++;
+        
+        _safeMint(to, tokenId);
+        _tokenURIs[tokenId] = tokenURI_;
+        emit TokenMinted(to, tokenId);
+        emit TokenURIUpdated(tokenId, tokenURI_);
+        
+        return tokenId;
+    }
+
+    /**
+     * @dev Override tokenURI to return stored URI
+     */
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        require(_ownerOf(tokenId) != address(0), "Token does not exist");
+        string memory _tokenURI = _tokenURIs[tokenId];
+        string memory base = super._baseURI();
+
+        // If there is no base URI, return the token URI.
+        if (bytes(base).length == 0) {
+            return _tokenURI;
+        }
+        // If both are set, concatenate the baseURI and tokenURI (via abi.encodePacked).
+        if (bytes(_tokenURI).length > 0) {
+            return string(abi.encodePacked(base, _tokenURI));
+        }
+
+        return super.tokenURI(tokenId);
     }
 
     /**
@@ -110,7 +163,14 @@ contract MyONFT721 is ONFT721 {
         return _tokenIdCounter - 1;
     }
 
-    function setForgingDuration(uint256 _duration) external onlyOwner {
+    /**
+     * @dev Override supportsInterface to handle multiple inheritance
+     */
+    function supportsInterface(bytes4 interfaceId) public view virtual override returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
+    function setForgingDuration(uint256 _duration) external {
         uint256 oldDuration = forgingDuration;
         forgingDuration = _duration;
         emit ForgingDurationUpdated(oldDuration, _duration);
