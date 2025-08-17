@@ -15,30 +15,23 @@ const deploy: DeployFunction = async (hre) => {
     console.log(`Network: ${hre.network.name}`)
     console.log(`Deployer: ${deployer}`)
 
-    // This is an external deployment pulled in from @layerzerolabs/lz-evm-sdk-v2
-    //
-    // @layerzerolabs/toolbox-hardhat takes care of plugging in the external deployments
-    // from @layerzerolabs packages based on the configuration in your hardhat config
-    //
-    // For this to work correctly, your network config must define an eid property
-    // set to `EndpointId` as defined in @layerzerolabs/lz-definitions
-    //
-    // For example:
-    //
-    // networks: {
-    //   fuji: {
-    //     ...
-    //     eid: EndpointId.AVALANCHE_V2_TESTNET
-    //   }
-    // }
     const endpointV2Deployment = await hre.deployments.get('EndpointV2')
 
-    // If the onft721Adapter configuration is defined on a network that is deploying an ONFT721,
-    // the deployment will log a warning and skip the deployment
     if (hre.network.config.onft721Adapter != null) {
         console.warn(`onft721Adapter configuration found on OFT deployment, skipping ONFT721 deployment`)
         return
     }
+
+    // Optional forged collection env var per network
+    const zero = '0x0000000000000000000000000000000000000000'
+    const forgedCollection =
+        hre.network.name === 'arbitrumSepolia'
+            ? (process.env.FM_ARB ?? zero)
+            : hre.network.name === 'baseSepolia'
+              ? (process.env.FM_BASE ?? zero)
+              : hre.network.name === 'flowTestnet'
+                ? (process.env.FM_FLOW ?? zero)
+                : zero
 
     const { address } = await deploy(contractName, {
         from: deployer,
@@ -53,6 +46,23 @@ const deploy: DeployFunction = async (hre) => {
     })
 
     console.log(`Deployed contract: ${contractName}, network: ${hre.network.name}, address: ${address}`)
+
+    // Set forged collection if provided
+    if (forgedCollection !== zero) {
+        console.log(`Setting forged collection for ${hre.network.name}: ${forgedCollection}`)
+        const contract = await hre.ethers.getContractAt(contractName, address)
+
+        // Get the local EID from the network config
+        const localEid = hre.network.config.eid
+        if (!localEid) {
+            console.warn(`No EID found in network config for ${hre.network.name}, skipping forged collection setup`)
+            return
+        }
+
+        const tx = await contract.setForgedCollection(localEid, forgedCollection)
+        await tx.wait()
+        console.log(`Forged collection set successfully for EID ${localEid}`)
+    }
 }
 
 deploy.tags = [contractName]
