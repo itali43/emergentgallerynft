@@ -40,42 +40,43 @@ async function main() {
         const completeTx = await contract.completeForgingMasterpiece(1);
         await completeTx.wait();
         console.log('🎉 Completed forging masterpiece for token #1');
+
+        // Example: Send forged NFT from Base Sepolia to Arbitrum Sepolia
+        console.log('\n🚀 Sending forged NFT cross-chain...');
+        const dstEid = 40231; // Arbitrum Sepolia endpoint ID
+        const recipientAddress = '0x3006b25a6ccAdbF696794f96c08894E959702392'; // Your address
+        const metadataURI = 'https://your-metadata-url.com/forged/1.json';
+
+        // Convert address to bytes32
+        const toBytes32 = hre.ethers.utils.hexZeroPad(recipientAddress, 32);
+
+        // Build options for gas (using proper even-length hex)
+        const optionsHex = '0x0003010011010000000000000000000000000030d400'; // Fixed: even length
+        const composeBytes = hre.ethers.utils.toUtf8Bytes(metadataURI); // This triggers forgery mode
+
+        // Create SendParam as array: [dstEid, to, tokenId, extraOptions, composeMsg, onftCmd]
+        const sendParam = [dstEid, toBytes32, 1, optionsHex, composeBytes, '0x'];
+
+        // Get messaging fee quote
+        const messagingFee = await contract.quoteSend(sendParam, false);
+        const nativeFee = Array.isArray(messagingFee) ? messagingFee[0] : messagingFee.nativeFee;
+        console.log(`💰 Messaging fee: ${hre.ethers.utils.formatEther(nativeFee)} ETH`);
+
+        // Send the forged NFT
+        const forgeTx = await contract.send(
+            sendParam,
+            [nativeFee, 0], // MessagingFee as array
+            deployer.address, // refund address
+            { value: nativeFee }
+        );
+
+        await forgeTx.wait();
+        console.log('🚀 Forged NFT sent cross-chain!');
     } else {
         const forgingInfo = await contract.getForgingInfo(1);
         console.log(`⏳ Still need to wait ${forgingInfo.timeRemaining} seconds`);
+        console.log('❌ Skipping cross-chain send since forging is not complete');
     }
-
-    // Example: Send forged NFT from Base Sepolia to Arbitrum Sepolia
-    const dstEid = 40231; // Arbitrum Sepolia endpoint ID
-    const recipientAddress = '0x3006b25a6ccAdbF696794f96c08894E959702392'; // Your address
-    const metadataURI = 'https://your-metadata-url.com/forged/1.json';
-
-    // Convert address to bytes32
-    const toBytes32 = hre.ethers.utils.hexZeroPad(recipientAddress, 32);
-
-    // Create SendParam for forging (composeMsg contains the metadata URI)
-    const sendParam = {
-        dstEid: dstEid,
-        to: toBytes32,
-        tokenId: 1,
-        extraOptions: '0x', // Empty for basic send
-        composeMsg: hre.ethers.utils.toUtf8Bytes(metadataURI), // This triggers forgery mode
-    };
-
-    // Get messaging fee quote
-    const messagingFee = await contract.quoteSend(sendParam, false);
-    console.log(`💰 Messaging fee: ${hre.ethers.utils.formatEther(messagingFee.nativeFee)} ETH`);
-
-    // Send the forged NFT
-    const forgeTx = await contract.send(
-        sendParam,
-        messagingFee,
-        deployer.address, // refund address
-        { value: messagingFee.nativeFee }
-    );
-
-    await forgeTx.wait();
-    console.log('🚀 Forged NFT sent cross-chain!');
 }
 
 main()

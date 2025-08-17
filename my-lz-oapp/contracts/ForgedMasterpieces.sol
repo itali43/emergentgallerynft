@@ -11,7 +11,7 @@ contract ForgedMasterpieces is ERC721URIStorage, Ownable {
         Ownable(initialOwner)
     {}
 
-    function mintWithURI(address to, uint256 tokenId, string calldata tokenURI_) external onlyOwner {
+    function mintWithURI(address to, uint256 tokenId, string calldata tokenURI_) external {
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, tokenURI_);
     }
